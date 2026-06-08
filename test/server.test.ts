@@ -40,3 +40,23 @@ test('throws on malformed YAML', () => {
   // YAML 1.2 is forgiving; use a clearly invalid construct.
   assert.throws(() => yamlToJson('key: value\n  bad indent: 1\nkey2:\n - [unclosed'));
 });
+
+test('throws on malformed YAML in multi-document mode', () => {
+  // parseAllDocuments collects errors per-document rather than throwing;
+  // the server must still report the failure instead of returning garbage.
+  assert.throws(() =>
+    yamlToJson('a: 1\n---\nkey: value\n  bad indent: 1\nkey2:\n - [unclosed', {
+      allDocuments: true,
+    }),
+  );
+});
+
+test('parses multiple valid documents', () => {
+  const v = yamlToJson('a: 1\n---\nb: 2\n---\n- x\n- y\n', { allDocuments: true });
+  assert.deepEqual(v, [{ a: 1 }, { b: 2 }, ['x', 'y']]);
+});
+
+test('respects custom indent width', () => {
+  const y = jsonToYaml({ a: { b: 1 } }, { indent: 4 });
+  assert.match(y, /a:\n {4}b: 1/);
+});

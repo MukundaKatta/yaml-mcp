@@ -12,13 +12,21 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { pathToFileURL } from 'node:url';
 import { parse as yamlParse, parseAllDocuments, stringify as yamlStringify } from 'yaml';
 
 const VERSION = '0.1.0';
 
 export function yamlToJson(text: string, options: { allDocuments?: boolean } = {}): unknown {
   if (options.allDocuments) {
-    return parseAllDocuments(text).map((d) => d.toJS());
+    return parseAllDocuments(text).map((d) => {
+      // parseAllDocuments collects errors on each document instead of throwing,
+      // so surface them to stay consistent with single-document parse().
+      if (d.errors.length > 0) {
+        throw d.errors[0];
+      }
+      return d.toJS();
+    });
   }
   return yamlParse(text);
 }
@@ -89,7 +97,10 @@ function errorResult(message: string) {
   return { isError: true, content: [{ type: 'text', text: message }] };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run as a server only when invoked directly (not when imported, e.g. by tests).
+// pathToFileURL correctly encodes paths with spaces or special characters, which
+// a raw `file://${process.argv[1]}` concatenation would mishandle.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   process.stderr.write(`yaml MCP server v${VERSION} ready on stdio\n`);
